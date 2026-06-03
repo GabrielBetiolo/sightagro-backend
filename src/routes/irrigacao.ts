@@ -1,13 +1,15 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
 export async function irrigacaoRoutes(app: FastifyInstance) {
-  const auth = { preHandler: [app.authenticate] }
+  const auth = async (request: FastifyRequest, reply: FastifyReply) => {
+    await app.authenticate(request, reply)
+  }
 
-  app.get('/', auth, async (request) => {
+  app.get('/', { preHandler: auth }, async (request) => {
     const payload = request.user as { id: number }
     return prisma.irrigacao.findMany({
       where: { fazenda: { userId: payload.id } },
@@ -15,20 +17,17 @@ export async function irrigacaoRoutes(app: FastifyInstance) {
     })
   })
 
-  app.patch('/:id/toggle', auth, async (request) => {
+  app.patch('/:id/toggle', { preHandler: auth }, async (request) => {
     const { id } = request.params as { id: string }
     const current = await prisma.irrigacao.findUnique({ where: { id: Number(id) } })
     if (!current) throw new Error('Zona não encontrada')
     return prisma.irrigacao.update({
       where: { id: Number(id) },
-      data: {
-        ativa: !current.ativa,
-        fluxo: !current.ativa ? 4.2 : 0
-      }
+      data: { ativa: !current.ativa, fluxo: !current.ativa ? 4.2 : 0 }
     })
   })
 
-  app.post('/', auth, async (request, reply) => {
+  app.post('/', { preHandler: auth }, async (request, reply) => {
     const schema = z.object({
       zona: z.string(),
       duracao: z.number().int().positive(),

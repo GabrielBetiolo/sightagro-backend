@@ -1,11 +1,14 @@
-// src/routes/dashboard.ts
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 export async function dashboardRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [(app as any).authenticate] }, async (request) => {
+  const auth = async (request: FastifyRequest, reply: FastifyReply) => {
+    await app.authenticate(request, reply)
+  }
+
+  app.get('/', { preHandler: auth }, async (request) => {
     const payload = request.user as { id: number }
 
     const fazendas = await prisma.fazenda.findMany({

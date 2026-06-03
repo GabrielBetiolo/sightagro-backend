@@ -1,24 +1,30 @@
-// src/server.ts
-// Cole em: backend/src/server.ts
-
-import Fastify from 'fastify'
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
-import { authRoutes } from './routes/auth.js'
-import { fazendasRoutes } from './routes/fazendas.js'
-import { sensoresRoutes } from './routes/sensores.js'
-import { alertasRoutes } from './routes/alertas.js'
-import { irrigacaoRoutes } from './routes/irrigacao.js'
-import { dashboardRoutes } from './routes/dashboard.js'
+import { authRoutes } from './routes/auth'
+import { fazendasRoutes } from './routes/fazendas'
+import { sensoresRoutes } from './routes/sensores'
+import { alertasRoutes } from './routes/alertas'
+import { irrigacaoRoutes } from './routes/irrigacao'
+import { dashboardRoutes } from './routes/dashboard'
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  }
+}
 
 const app = Fastify({ logger: true })
 
-// Plugins
-app.register(cors, { origin: process.env.FRONTEND_URL || 'http://localhost:5173' })
-app.register(jwt, { secret: process.env.JWT_SECRET || 'agrosmart-secret-key-change-in-production' })
+app.register(cors, {
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173'
+})
 
-// Decorador de autenticação
-app.decorate('authenticate', async (request: any, reply: any) => {
+app.register(jwt, {
+  secret: process.env.JWT_SECRET || 'agrosmart-secret-key-change-in-production'
+})
+
+app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
   try {
     await request.jwtVerify()
   } catch {
@@ -26,7 +32,6 @@ app.decorate('authenticate', async (request: any, reply: any) => {
   }
 })
 
-// Rotas
 app.register(authRoutes, { prefix: '/auth' })
 app.register(dashboardRoutes, { prefix: '/dashboard' })
 app.register(fazendasRoutes, { prefix: '/fazendas' })
@@ -40,7 +45,7 @@ const PORT = Number(process.env.PORT) || 3333
 
 app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
   if (err) { app.log.error(err); process.exit(1) }
-  console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
+  console.log(`Servidor rodando na porta ${PORT}`)
 })
 
 export { app }

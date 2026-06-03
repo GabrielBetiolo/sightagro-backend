@@ -1,13 +1,15 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
 export async function fazendasRoutes(app: FastifyInstance) {
-  const auth = { preHandler: [app.authenticate] }
+  const auth = async (request: FastifyRequest, reply: FastifyReply) => {
+    await app.authenticate(request, reply)
+  }
 
-  app.get('/', auth, async (request) => {
+  app.get('/', { preHandler: auth }, async (request) => {
     const payload = request.user as { id: number }
     return prisma.fazenda.findMany({
       where: { userId: payload.id },
@@ -18,7 +20,7 @@ export async function fazendasRoutes(app: FastifyInstance) {
     })
   })
 
-  app.get('/:id', auth, async (request, reply) => {
+  app.get('/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
     const fazenda = await prisma.fazenda.findFirst({
@@ -29,7 +31,7 @@ export async function fazendasRoutes(app: FastifyInstance) {
     return fazenda
   })
 
-  app.post('/', auth, async (request, reply) => {
+  app.post('/', { preHandler: auth }, async (request, reply) => {
     const payload = request.user as { id: number }
     const schema = z.object({
       nome: z.string().min(2),
@@ -52,7 +54,7 @@ export async function fazendasRoutes(app: FastifyInstance) {
     return reply.status(201).send(fazenda)
   })
 
-  app.put('/:id', auth, async (request, reply) => {
+  app.put('/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
     const fazenda = await prisma.fazenda.findFirst({ where: { id: Number(id), userId: payload.id } })
@@ -61,7 +63,7 @@ export async function fazendasRoutes(app: FastifyInstance) {
     return prisma.fazenda.update({ where: { id: Number(id) }, data: body })
   })
 
-  app.delete('/:id', auth, async (request, reply) => {
+  app.delete('/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
     const fazenda = await prisma.fazenda.findFirst({ where: { id: Number(id), userId: payload.id } })
