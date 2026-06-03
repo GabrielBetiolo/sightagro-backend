@@ -6,7 +6,7 @@ import { z } from 'zod'
 const prisma = new PrismaClient()
 
 export async function fazendasRoutes(app: FastifyInstance) {
-  const auth = { preHandler: [app.authenticate] }
+  const auth = { preHandler: [(app as any)] }
 
   app.get('/', auth, async (request) => {
     const { id } = request.user as { id: number }

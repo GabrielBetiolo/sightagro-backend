@@ -69,7 +69,7 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // GET /auth/me
-  app.get('/me', { preHandler: [app.authenticate] }, async (request) => {
+  app.get('/me', { preHandler: [(app as any).authenticate] }, async (request) => {
     const payload = request.user as { id: number }
     const user = await prisma.user.findUnique({
       where: { id: payload.id },
@@ -79,7 +79,7 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // PUT /auth/me
-  app.put('/me', { preHandler: [app.authenticate] }, async (request, reply) => {
+  app.put('/me', { preHandler: [(app as any).authenticate] }, async (request, reply) => {
     const payload = request.user as { id: number }
     const schema = z.object({
       name: z.string().min(2).optional(),

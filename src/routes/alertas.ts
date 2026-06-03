@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 export async function alertasRoutes(app: FastifyInstance) {
-  const auth = { preHandler: [app.authenticate] }
+  const auth = { preHandler: [(app as any)] }
 
   app.get('/', auth, async (request) => {
     const { id: userId } = request.user as { id: number }

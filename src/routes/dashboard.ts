@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 export async function dashboardRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [app.authenticate] }, async (request) => {
+  app.get('/', { preHandler: [(app as any).authenticate] }, async (request) => {
     const payload = request.user as { id: number }
 
     const fazendas = await prisma.fazenda.findMany({
