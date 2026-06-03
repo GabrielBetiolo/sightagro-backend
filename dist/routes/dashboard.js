@@ -4,7 +4,10 @@ exports.dashboardRoutes = dashboardRoutes;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 async function dashboardRoutes(app) {
-    app.get('/', { preHandler: [app.authenticate] }, async (request) => {
+    const auth = async (request, reply) => {
+        await app.authenticate(request, reply);
+    };
+    app.get('/', { preHandler: auth }, async (request) => {
         const payload = request.user;
         const fazendas = await prisma.fazenda.findMany({
             where: { userId: payload.id },

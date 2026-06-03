@@ -5,18 +5,20 @@ const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 const prisma = new client_1.PrismaClient();
 async function sensoresRoutes(app) {
-    const auth = { preHandler: [app] };
-    app.get('/', auth, async (request) => {
-        const { id: userId } = request.user;
+    const auth = async (request, reply) => {
+        await app.authenticate(request, reply);
+    };
+    app.get('/', { preHandler: auth }, async (request) => {
+        const payload = request.user;
         return prisma.sensor.findMany({
-            where: { fazenda: { userId } },
+            where: { fazenda: { userId: payload.id } },
             include: {
                 fazenda: { select: { nome: true } },
                 leituras: { orderBy: { createdAt: 'desc' }, take: 1 }
             }
         });
     });
-    app.post('/', auth, async (request, reply) => {
+    app.post('/', { preHandler: auth }, async (request, reply) => {
         const schema = zod_1.z.object({
             codigo: zod_1.z.string(),
             tipo: zod_1.z.string(),
@@ -25,20 +27,33 @@ async function sensoresRoutes(app) {
         const result = schema.safeParse(request.body);
         if (!result.success)
             return reply.status(400).send({ message: 'Dados inválidos' });
-        return reply.status(201).send(await prisma.sensor.create({ data: result.data }));
+        const sensor = await prisma.sensor.create({
+            data: {
+                codigo: result.data.codigo,
+                tipo: result.data.tipo,
+                fazenda: { connect: { id: result.data.fazendaId } }
+            }
+        });
+        return reply.status(201).send(sensor);
     });
-    app.patch('/:id/status', auth, async (request, reply) => {
+    app.patch('/:id/status', { preHandler: auth }, async (request) => {
         const { id } = request.params;
         const { status } = request.body;
         return prisma.sensor.update({ where: { id: Number(id) }, data: { status } });
     });
-    // POST leitura
-    app.post('/:id/leituras', auth, async (request, reply) => {
+    app.post('/:id/leituras', { preHandler: auth }, async (request, reply) => {
         const { id } = request.params;
         const schema = zod_1.z.object({ valor: zod_1.z.number(), unidade: zod_1.z.string() });
         const result = schema.safeParse(request.body);
         if (!result.success)
             return reply.status(400).send({ message: 'Dados inválidos' });
-        return reply.status(201).send(await prisma.leitura.create({ data: { sensorId: Number(id), ...result.data } }));
+        const leitura = await prisma.leitura.create({
+            data: {
+                valor: result.data.valor,
+                unidade: result.data.unidade,
+                sensor: { connect: { id: Number(id) } }
+            }
+        });
+        return reply.status(201).send(leitura);
     });
 }
