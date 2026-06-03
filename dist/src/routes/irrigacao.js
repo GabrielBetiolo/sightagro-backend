@@ -2,11 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 const prisma = new PrismaClient();
 export async function irrigacaoRoutes(app) {
-    const auth = { preHandler: [app] };
+    const auth = { preHandler: [app.authenticate] };
     app.get('/', auth, async (request) => {
-        const { id: userId } = request.user;
+        const payload = request.user;
         return prisma.irrigacao.findMany({
-            where: { fazenda: { userId } },
+            where: { fazenda: { userId: payload.id } },
             include: { fazenda: { select: { nome: true } } }
         });
     });
@@ -32,6 +32,13 @@ export async function irrigacaoRoutes(app) {
         const result = schema.safeParse(request.body);
         if (!result.success)
             return reply.status(400).send({ message: 'Dados inválidos' });
-        return reply.status(201).send(await prisma.irrigacao.create({ data: result.data }));
+        const irrigacao = await prisma.irrigacao.create({
+            data: {
+                zona: result.data.zona,
+                duracao: result.data.duracao,
+                fazenda: { connect: { id: result.data.fazendaId } }
+            }
+        });
+        return reply.status(201).send(irrigacao);
     });
 }

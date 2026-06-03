@@ -27,7 +27,14 @@ export async function sensoresRoutes(app: FastifyInstance) {
     })
     const result = schema.safeParse(request.body)
     if (!result.success) return reply.status(400).send({ message: 'Dados inválidos' })
-    return reply.status(201).send(await prisma.sensor.create({ data: result.data }))
+    return reply.status(201).send(await prisma.sensor.create({ 
+      data: {
+        codigo: result.data.codigo,
+        tipo: result.data.tipo,
+        fazenda: {
+          connect: { id: Number(result.data.fazendaId)}
+        }
+     }}))
   })
 
   app.patch('/:id/status', auth, async (request, reply) => {
@@ -42,6 +49,14 @@ export async function sensoresRoutes(app: FastifyInstance) {
     const schema = z.object({ valor: z.number(), unidade: z.string() })
     const result = schema.safeParse(request.body)
     if (!result.success) return reply.status(400).send({ message: 'Dados inválidos' })
-    return reply.status(201).send(await prisma.leitura.create({ data: { sensorId: Number(id), ...result.data } }))
+    return reply.status(201).send(await prisma.leitura.create({
+      data: {
+        valor: Number(result.data.valor),
+        unidade: result.data.unidade,
+        sensor: {
+          connect: { id: Number(id)}
+        }
+      } 
+    }))
   })
 }

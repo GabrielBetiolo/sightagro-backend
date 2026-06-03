@@ -1,7 +1,15 @@
 import 'fastify';
 
 declare module 'fastify' {
-    export interface FastufyInstance {
-        authenticate: (request: any, reply: any) => Promise<void>;
+    export interface FastifyInstance {
+        authenticate: any;
+    }
+}
+
+declare global {
+    namespace NodeJS {
+        interface ProcessEnv {
+            [key: string]: string | undefined;
+        }
     }
 }
