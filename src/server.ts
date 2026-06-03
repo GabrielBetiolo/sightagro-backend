@@ -4,12 +4,12 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
-import { authRoutes } from './routes/auth'
-import { fazendasRoutes } from './routes/fazendas'
-import { sensoresRoutes } from './routes/sensores'
-import { alertasRoutes } from './routes/alertas'
-import { irrigacaoRoutes } from './routes/irrigacao'
-import { dashboardRoutes } from './routes/dashboard'
+import { authRoutes } from './routes/auth.js'
+import { fazendasRoutes } from './routes/fazendas.js'
+import { sensoresRoutes } from './routes/sensores.js'
+import { alertasRoutes } from './routes/alertas.js'
+import { irrigacaoRoutes } from './routes/irrigacao.js'
+import { dashboardRoutes } from './routes/dashboard.js'
 
 const app = Fastify({ logger: true })
 
