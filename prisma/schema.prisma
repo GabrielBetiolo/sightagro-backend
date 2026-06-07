@@ -18,6 +18,9 @@ model User {
   phone              String?
   timezone           String?   @default("America/Sao_Paulo")
   language           String?   @default("pt-BR")
+  plan               String    @default("free")
+  planExpiresAt      DateTime?
+  mpSubscriptionId   String?
   resetToken         String?
   resetTokenExpires  DateTime?
   createdAt          DateTime  @default(now())
