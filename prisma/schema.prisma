@@ -9,45 +9,48 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  fazendas  Fazenda[]
+  id                 Int       @id @default(autoincrement())
+  name               String
+  email              String    @unique
+  password           String
+  role               String    @default("user")
+  avatar             String?
+  phone              String?
+  timezone           String?   @default("America/Sao_Paulo")
+  language           String?   @default("pt-BR")
+  resetToken         String?
+  resetTokenExpires  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  fazendas           Fazenda[]
 }
 
 model Fazenda {
-  id          Int      @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   nome        String
   localizacao String
   area        Float
   cultura     String
-  status      String   @default("ativa")
+  status      String      @default("ativa")
   userId      Int
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  user        User        @relation(fields: [userId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   sensores    Sensor[]
   alertas     Alerta[]
   irrigacoes  Irrigacao[]
 }
 
 model Sensor {
-  id        Int      @id @default(autoincrement())
-  codigo    String   @unique
+  id        Int       @id @default(autoincrement())
+  codigo    String    @unique
   tipo      String
-  status    String   @default("online")
-  bateria   Int      @default(100)
+  status    String    @default("online")
+  bateria   Int       @default(100)
   fazendaId Int
-  fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  fazenda   Fazenda   @relation(fields: [fazendaId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   leituras  Leitura[]
 }
 
@@ -72,14 +75,14 @@ model Alerta {
 }
 
 model Irrigacao {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   zona      String
-  ativa     Boolean  @default(false)
-  fluxo     Float    @default(0)
-  duracao   Int      @default(30)
+  ativa     Boolean   @default(false)
+  fluxo     Float     @default(0)
+  duracao   Int       @default(30)
   proxima   DateTime?
   fazendaId Int
-  fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  fazenda   Fazenda   @relation(fields: [fazendaId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
