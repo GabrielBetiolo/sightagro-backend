@@ -10,6 +10,7 @@ import { dashboardRoutes } from './routes/dashboard'
 import { pagamentosRoutes } from './routes/pagamentos'
 import { climaRoutes } from './routes/clima'
 import { notificacoesRoutes } from './routes/notificacoes'
+import { assistenteRoutes } from './routes/assistente'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -36,6 +37,7 @@ app.register(irrigacaoRoutes, { prefix: '/irrigacao' })
 app.register(pagamentosRoutes, { prefix: '/pagamentos' })
 app.register(climaRoutes, { prefix: '/clima' })
 app.register(notificacoesRoutes, { prefix: '/notificacoes' })
+app.register(assistenteRoutes, { prefix: '/assistente' })
 
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
