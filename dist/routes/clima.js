@@ -30,7 +30,6 @@ async function climaRoutes(app) {
                 getClima(fazenda.localizacao),
                 getPrevisao(fazenda.localizacao)
             ]);
-            // Gerar alertas automáticos de clima
             const alertasClima = [];
             const temp = atual.main.temp;
             const chuva = atual.rain?.['1h'] || 0;
@@ -42,7 +41,6 @@ async function climaRoutes(app) {
                 alertasClima.push({ tipo: 'warning', titulo: 'Umidade muito baixa', descricao: `Umidade do ar em ${atual.main.humidity}% — considere irrigar.` });
             if (temp > 38)
                 alertasClima.push({ tipo: 'danger', titulo: 'Calor extremo', descricao: `Temperatura de ${temp.toFixed(1)}°C — risco para culturas sensíveis.` });
-            // Salvar alertas no banco
             for (const alerta of alertasClima) {
                 const existe = await prisma.alerta.findFirst({
                     where: { fazendaId: fazenda.id, titulo: alerta.titulo, createdAt: { gte: new Date(Date.now() - 6 * 3600000) } }
@@ -59,7 +57,7 @@ async function climaRoutes(app) {
                     vento: atual.wind.speed,
                     descricao: atual.weather[0].description,
                     icone: atual.weather[0].icon,
-                    chuva: chuva,
+                    chuva,
                     cidade: atual.name
                 },
                 previsao: previsao.list.slice(0, 8).map((p) => ({
