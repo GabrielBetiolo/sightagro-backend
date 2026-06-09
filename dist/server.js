@@ -13,14 +13,13 @@ const sensores_1 = require("./routes/sensores");
 const alertas_1 = require("./routes/alertas");
 const irrigacao_1 = require("./routes/irrigacao");
 const dashboard_1 = require("./routes/dashboard");
+const pagamentos_1 = require("./routes/pagamentos");
+const clima_1 = require("./routes/clima");
+const notificacoes_1 = require("./routes/notificacoes");
 const app = (0, fastify_1.default)({ logger: true });
 exports.app = app;
-app.register(cors_1.default, {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173'
-});
-app.register(jwt_1.default, {
-    secret: process.env.JWT_SECRET || 'agrosmart-secret-key-change-in-production'
-});
+app.register(cors_1.default, { origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+app.register(jwt_1.default, { secret: process.env.JWT_SECRET || 'agrosmart-secret' });
 app.decorate('authenticate', async function (request, reply) {
     try {
         await request.jwtVerify();
@@ -35,6 +34,9 @@ app.register(fazendas_1.fazendasRoutes, { prefix: '/fazendas' });
 app.register(sensores_1.sensoresRoutes, { prefix: '/sensores' });
 app.register(alertas_1.alertasRoutes, { prefix: '/alertas' });
 app.register(irrigacao_1.irrigacaoRoutes, { prefix: '/irrigacao' });
+app.register(pagamentos_1.pagamentosRoutes, { prefix: '/pagamentos' });
+app.register(clima_1.climaRoutes, { prefix: '/clima' });
+app.register(notificacoes_1.notificacoesRoutes, { prefix: '/notificacoes' });
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 const PORT = Number(process.env.PORT) || 3333;
 app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
