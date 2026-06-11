@@ -1,10 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
-import Anthropic from '@anthropic-ai/sdk'
 
 const prisma = new PrismaClient()
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const GROQ_API_KEY = process.env.GROQ_API_KEY
 
 export async function assistenteRoutes(app: FastifyInstance) {
   const auth = async (req: FastifyRequest, rep: FastifyReply) => { await app.authenticate(req, rep) }
@@ -37,13 +36,29 @@ Dados atuais do usuário ${user?.name}:
 Fazendas: ${JSON.stringify(fazendas.map(f => ({ nome: f.nome, localizacao: f.localizacao, cultura: f.cultura, area: f.area, sensores: f.sensores.map(s => ({ codigo: s.codigo, tipo: s.tipo, status: s.status, ultimaLeitura: s.leituras[0] })) })))}
 Alertas não lidos: ${JSON.stringify(alertas.map(a => ({ tipo: a.tipo, titulo: a.titulo, fazenda: a.fazenda.nome })))}`
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: result.data.messages
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...result.data.messages
+        ]
+      })
     })
 
-    return { content: (response.content[0] as any).text }
+    if (!response.ok) {
+      const err = await response.text()
+      console.error('Groq error:', err)
+      return reply.status(500).send({ message: 'Erro no assistente' })
+    }
+
+    const data = await response.json() as any
+    return { content: data.choices[0].message.content }
   })
 }

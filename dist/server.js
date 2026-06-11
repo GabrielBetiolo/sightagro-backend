@@ -16,6 +16,7 @@ const dashboard_1 = require("./routes/dashboard");
 const pagamentos_1 = require("./routes/pagamentos");
 const clima_1 = require("./routes/clima");
 const notificacoes_1 = require("./routes/notificacoes");
+const assistente_1 = require("./routes/assistente");
 const app = (0, fastify_1.default)({ logger: true });
 exports.app = app;
 app.register(cors_1.default, { origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
@@ -37,6 +38,7 @@ app.register(irrigacao_1.irrigacaoRoutes, { prefix: '/irrigacao' });
 app.register(pagamentos_1.pagamentosRoutes, { prefix: '/pagamentos' });
 app.register(clima_1.climaRoutes, { prefix: '/clima' });
 app.register(notificacoes_1.notificacoesRoutes, { prefix: '/notificacoes' });
+app.register(assistente_1.assistenteRoutes, { prefix: '/assistente' });
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 const PORT = Number(process.env.PORT) || 3333;
 app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
