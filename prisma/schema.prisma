@@ -1,5 +1,14 @@
+// ============================================================================
+// SCHEMA DO BANCO DE DADOS - AGROSMART
+// ============================================================================
+// Este arquivo define todos os modelos (tabelas) do banco PostgreSQL.
+// Após editar, rode: npx prisma migrate dev --name <nome_da_migration>
+// ============================================================================
+
 generator client {
   provider      = "prisma-client-js"
+  // binaryTargets garante que o Prisma Client funcione tanto localmente
+  // (Windows/Mac) quanto no ambiente Linux do Render (produção)
   binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
@@ -8,96 +17,158 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ----------------------------------------------------------------------------
+// USUÁRIO - Conta do produtor rural
+// ----------------------------------------------------------------------------
 model User {
   id                 Int                @id @default(autoincrement())
   name               String
   email              String             @unique
-  password           String
+  password           String             // senha já em hash (bcrypt)
   role               String             @default("user")
-  avatar             String?
+  avatar             String?            // URL da foto de perfil (Cloudinary)
   phone              String?
   timezone           String?            @default("America/Sao_Paulo")
-  language           String?            @default("pt-BR")
-  plan               String             @default("free")
+  language           String?            @default("pt-BR") // pt-BR | en-US | es-ES
+
+  // Controle de plano/assinatura (Mercado Pago)
+  plan               String             @default("free") // free | pro | enterprise
   planExpiresAt      DateTime?
   mpSubscriptionId   String?
+
+  // Recuperação de senha
   resetToken         String?
   resetTokenExpires  DateTime?
+
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
+
   fazendas           Fazenda[]
   pushSubscriptions  PushSubscription[]
 }
 
+// ----------------------------------------------------------------------------
+// FAZENDA - Propriedade rural cadastrada pelo usuário
+// ----------------------------------------------------------------------------
 model Fazenda {
   id          Int         @id @default(autoincrement())
   nome        String
-  localizacao String
-  area        Float
-  cultura     String
+  localizacao String      // "Cidade, UF" - usado para buscar previsão do tempo
+  area        Float       // área em hectares
+  cultura     String      // cultura principal (ex: Soja, Milho, Gado)
   status      String      @default("ativa")
+
   userId      Int
   user        User        @relation(fields: [userId], references: [id])
+
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+
   sensores    Sensor[]
   alertas     Alerta[]
   irrigacoes  Irrigacao[]
+  documentos  Documento[] // NOVO: documentos da propriedade (INCRA, ITR, GTA, etc.)
 }
 
+// ----------------------------------------------------------------------------
+// SENSOR - Dispositivo de monitoramento (Arduino/ESP32) instalado na fazenda
+// ----------------------------------------------------------------------------
 model Sensor {
-  id           Int       @id @default(autoincrement())
-  codigo       String    @unique
-  tipo         String
-  status       String    @default("online")
-  bateria      Int       @default(100)
-  token        String?   @unique
+  id            Int       @id @default(autoincrement())
+  codigo        String    @unique // identificador legível (ex: TEMP-01)
+  tipo          String    // Temperatura, Umidade, Solo, pH, etc.
+  status        String    @default("online") // online | offline | unstable
+  bateria       Int       @default(100)
+  token         String?   @unique // token usado pelo hardware para autenticar
   ultimaLeitura DateTime?
-  fazendaId    Int
-  fazenda      Fazenda   @relation(fields: [fazendaId], references: [id])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  leituras     Leitura[]
+
+  fazendaId     Int
+  fazenda       Fazenda   @relation(fields: [fazendaId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  leituras      Leitura[]
 }
 
+// ----------------------------------------------------------------------------
+// LEITURA - Histórico de valores enviados por um sensor
+// ----------------------------------------------------------------------------
 model Leitura {
   id        Int      @id @default(autoincrement())
   sensorId  Int
   sensor    Sensor   @relation(fields: [sensorId], references: [id])
   valor     Float
-  unidade   String
+  unidade   String   // °C, %, ppm, etc.
   createdAt DateTime @default(now())
 }
 
+// ----------------------------------------------------------------------------
+// ALERTA - Notificação gerada automaticamente (clima, sensor, documentos, etc.)
+// ----------------------------------------------------------------------------
 model Alerta {
   id        Int      @id @default(autoincrement())
-  tipo      String
+  tipo      String   // info | success | warning | danger
   titulo    String
   descricao String
   lido      Boolean  @default(false)
+
   fazendaId Int
   fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
+
   createdAt DateTime @default(now())
 }
 
+// ----------------------------------------------------------------------------
+// IRRIGACAO - Zona de irrigação controlável
+// ----------------------------------------------------------------------------
 model Irrigacao {
   id        Int       @id @default(autoincrement())
-  zona      String
+  zona      String    // nome da zona (ex: "Setor A - Soja Norte")
   ativa     Boolean   @default(false)
-  fluxo     Float     @default(0)
-  duracao   Int       @default(30)
-  proxima   DateTime?
+  fluxo     Float     @default(0) // L/min quando ativa
+  duracao   Int       @default(30) // duração padrão em minutos
+  proxima   DateTime? // próxima execução agendada
+
   fazendaId Int
   fazenda   Fazenda   @relation(fields: [fazendaId], references: [id])
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
 
+// ----------------------------------------------------------------------------
+// PUSH SUBSCRIPTION - Inscrição de notificações push do navegador
+// ----------------------------------------------------------------------------
 model PushSubscription {
   id        Int      @id @default(autoincrement())
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
   endpoint  String   @unique
-  keys      String
+  keys      String   // JSON serializado com { p256dh, auth }
   createdAt DateTime @default(now())
+}
+
+// ----------------------------------------------------------------------------
+// DOCUMENTO - NOVO: Documentos da propriedade rural
+// ----------------------------------------------------------------------------
+// Armazena documentos como INCRA, ITR, CCIR, Matrícula, GTA (gado), etc.
+// O arquivo em si é hospedado no Cloudinary; aqui guardamos apenas a
+// referência (URL) e os metadados para controle de vencimento.
+// ----------------------------------------------------------------------------
+model Documento {
+  id             Int       @id @default(autoincrement())
+  nome           String    // nome dado pelo usuário (ex: "ITR 2025")
+  tipo           String    // INCRA | ITR | CCIR | MATRICULA | GTA | OUTRO
+  arquivoUrl     String    // URL do arquivo no Cloudinary
+  arquivoTipo    String    // mime type (application/pdf, image/jpeg, etc.)
+  numero         String?   // número do documento/registro (opcional)
+  dataEmissao    DateTime? // data de emissão (opcional)
+  dataVencimento DateTime? // data de vencimento - usada para gerar alertas
+
+  fazendaId      Int
+  fazenda        Fazenda   @relation(fields: [fazendaId], references: [id])
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
