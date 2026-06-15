@@ -1,0 +1,69 @@
+# ============================================================================
+# .gitignore - BACKEND (Node.js + Fastify + Prisma)
+# ============================================================================
+
+# --- Dependências --------------------------------------------------------
+# Nunca versionar node_modules: são reinstaladas via "npm install" no deploy
+node_modules/
+.pnp
+.pnp.js
+
+# --- Variáveis de ambiente -------------------------------------------------
+# CRÍTICO: .env contém chaves secretas (DB, JWT, Resend, Mercado Pago, etc.)
+# Nunca deve ir para o repositório. Use .env.example como modelo público.
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# --- Build / Output ---------------------------------------------------------
+# Pasta gerada pelo "npm run build" (TypeScript -> JavaScript)
+dist/
+build/
+*.tsbuildinfo
+
+# --- Prisma ------------------------------------------------------------------
+# Não ignoramos a pasta prisma/migrations (ela precisa ser versionada!)
+# mas ignoramos arquivos temporários e o client gerado localmente
+generated/
+prisma/generated/
+
+# --- Logs ----------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Testes e cobertura ----------------------------------------------------
+coverage/
+.nyc_output/
+
+# --- Cache ------------------------------------------------------------------
+.cache/
+.turbo/
+.eslintcache
+
+# --- Editores / IDE --------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# --- Sistema Operacional -----------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Arquivos temporários ----------------------------------------------------
+*.tmp
+*.temp
+tmp/
+temp/
+
+# --- Uploads locais (caso existam testes de upload) --------------------------
+uploads/

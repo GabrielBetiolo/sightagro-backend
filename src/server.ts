@@ -18,9 +18,9 @@ import { pagamentosRoutes } from './routes/pagamentos'
 import { climaRoutes } from './routes/clima'
 import { notificacoesRoutes } from './routes/notificacoes'
 import { assistenteRoutes } from './routes/assistente'
-import { documentosRoutes } from './routes/documentos' // NOVO: documentos da terra
+import { documentosRoutes } from './routes/documentos'
+import { financeiroRoutes } from './routes/financeiro' // NOVO: gestão financeira
 
-// Tipagem extra para o Fastify reconhecer o decorator "authenticate"
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
@@ -29,13 +29,9 @@ declare module 'fastify' {
 
 const app = Fastify({ logger: true })
 
-// CORS liberado para o frontend (Vercel) acessar a API
 app.register(cors, { origin: true, credentials: true, methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'] })
-
-// Plugin de JWT - usado para autenticação via Bearer token
 app.register(jwt, { secret: process.env.JWT_SECRET || 'agrosmart-secret' })
 
-// Decorator "authenticate": usado como preHandler nas rotas privadas
 app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
   try {
     await request.jwtVerify()
@@ -46,7 +42,6 @@ app.decorate('authenticate', async function (request: FastifyRequest, reply: Fas
 
 // ----------------------------------------------------------------------------
 // REGISTRO DE ROTAS
-// Cada módulo de rota recebe um prefixo, ex: /auth/login, /fazendas, etc.
 // ----------------------------------------------------------------------------
 app.register(authRoutes, { prefix: '/auth' })
 app.register(dashboardRoutes, { prefix: '/dashboard' })
@@ -58,9 +53,9 @@ app.register(pagamentosRoutes, { prefix: '/pagamentos' })
 app.register(climaRoutes, { prefix: '/clima' })
 app.register(notificacoesRoutes, { prefix: '/notificacoes' })
 app.register(assistenteRoutes, { prefix: '/assistente' })
-app.register(documentosRoutes, { prefix: '/documentos' }) // NOVO
+app.register(documentosRoutes, { prefix: '/documentos' })
+app.register(financeiroRoutes, { prefix: '/financeiro' }) // NOVO
 
-// Health check - usado para "despertar" o backend no Render (plano free)
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
 const PORT = Number(process.env.PORT) || 3333
