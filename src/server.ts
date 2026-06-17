@@ -1,8 +1,6 @@
 // ============================================================================
 // SERVIDOR PRINCIPAL - AGROSMART BACKEND
 // ============================================================================
-// Configura o Fastify, registra plugins (CORS, JWT) e todas as rotas da API.
-// ============================================================================
 
 import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
@@ -19,7 +17,8 @@ import { climaRoutes } from './routes/clima'
 import { notificacoesRoutes } from './routes/notificacoes'
 import { assistenteRoutes } from './routes/assistente'
 import { documentosRoutes } from './routes/documentos'
-import { financeiroRoutes } from './routes/financeiro' // NOVO: gestão financeira
+import { financeiroRoutes } from './routes/financeiro'
+import { colaboradoresRoutes } from './routes/colaboradores' // NOVO
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -29,7 +28,12 @@ declare module 'fastify' {
 
 const app = Fastify({ logger: true })
 
-app.register(cors, { origin: true, credentials: true, methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'] })
+app.register(cors, {
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+})
+
 app.register(jwt, { secret: process.env.JWT_SECRET || 'agrosmart-secret' })
 
 app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
@@ -54,7 +58,8 @@ app.register(climaRoutes, { prefix: '/clima' })
 app.register(notificacoesRoutes, { prefix: '/notificacoes' })
 app.register(assistenteRoutes, { prefix: '/assistente' })
 app.register(documentosRoutes, { prefix: '/documentos' })
-app.register(financeiroRoutes, { prefix: '/financeiro' }) // NOVO
+app.register(financeiroRoutes, { prefix: '/financeiro' })
+app.register(colaboradoresRoutes, { prefix: '/colaboradores' }) // NOVO
 
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 

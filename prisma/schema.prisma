@@ -47,25 +47,27 @@ model User {
 // FAZENDA
 // ----------------------------------------------------------------------------
 model Fazenda {
-  id          Int          @id @default(autoincrement())
-  nome        String
-  localizacao String
-  area        Float
-  cultura     String
-  status      String       @default("ativa")
+  id             Int             @id @default(autoincrement())
+  nome           String
+  localizacao    String
+  area           Float
+  cultura        String
+  status         String          @default("ativa")
 
-  userId      Int
-  user        User         @relation(fields: [userId], references: [id])
+  userId         Int
+  user           User            @relation(fields: [userId], references: [id])
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  sensores    Sensor[]
-  alertas     Alerta[]
-  irrigacoes  Irrigacao[]
-  documentos  Documento[]
-  transacoes  Transacao[]    // NOVO: lançamentos financeiros
-  financiamentos Financiamento[] // NOVO: CPR / financiamentos
+  sensores       Sensor[]
+  alertas        Alerta[]
+  irrigacoes     Irrigacao[]
+  documentos     Documento[]
+  transacoes     Transacao[]
+  financiamentos Financiamento[]
+  colaboradores  Colaborador[]   // NOVO: equipe vinculada à fazenda
+  tarefas        Tarefa[]        // NOVO: tarefas vinculadas à fazenda
 }
 
 // ----------------------------------------------------------------------------
@@ -148,7 +150,7 @@ model PushSubscription {
 }
 
 // ----------------------------------------------------------------------------
-// DOCUMENTO - documentos da propriedade (INCRA, ITR, CCIR, GTA, etc.)
+// DOCUMENTO
 // ----------------------------------------------------------------------------
 model Documento {
   id             Int       @id @default(autoincrement())
@@ -167,23 +169,16 @@ model Documento {
   updatedAt      DateTime  @updatedAt
 }
 
-// ============================================================================
-// NOVO: GESTÃO FINANCEIRA RURAL
-// ============================================================================
-
 // ----------------------------------------------------------------------------
-// TRANSACAO - Lançamento financeiro (receita ou despesa)
-// ----------------------------------------------------------------------------
-// Representa qualquer movimento de caixa relacionado à fazenda: venda de
-// produção (receita), compra de insumos, mão de obra, maquinário (despesas).
+// TRANSACAO (financeiro)
 // ----------------------------------------------------------------------------
 model Transacao {
   id          Int      @id @default(autoincrement())
-  tipo        String   // "receita" | "despesa"
-  categoria   String   // ex: Insumos, Maquinário, Mão de obra, Venda, Outros
+  tipo        String
+  categoria   String
   descricao   String
-  valor       Float    // sempre positivo - o "tipo" define o sinal
-  data        DateTime // data em que o lançamento ocorreu (não createdAt)
+  valor       Float
+  data        DateTime
 
   fazendaId   Int
   fazenda     Fazenda  @relation(fields: [fazendaId], references: [id])
@@ -193,25 +188,90 @@ model Transacao {
 }
 
 // ----------------------------------------------------------------------------
-// FINANCIAMENTO - CPR (Cédula de Produto Rural) e financiamentos bancários
-// ----------------------------------------------------------------------------
-// Permite acompanhar dívidas/contratos vinculados à fazenda, com vencimento
-// e geração automática de alertas (mesmo padrão usado em Documento).
+// FINANCIAMENTO (CPR / financiamentos)
 // ----------------------------------------------------------------------------
 model Financiamento {
   id              Int       @id @default(autoincrement())
-  tipo            String    // "CPR" | "Financiamento" | "Outro"
-  instituicao     String    // banco / cooperativa / comprador (no caso de CPR)
-  descricao       String?   // observações livres
-  valor           Float     // valor total contratado
-  taxaJuros       Float?    // taxa de juros anual (%), opcional
+  tipo            String
+  instituicao     String
+  descricao       String?
+  valor           Float
+  taxaJuros       Float?
   dataContratacao DateTime?
-  dataVencimento  DateTime? // usado para gerar alertas de vencimento
-  status          String    @default("ativo") // "ativo" | "pago" | "vencido"
+  dataVencimento  DateTime?
+  status          String    @default("ativo")
 
   fazendaId       Int
   fazenda         Fazenda   @relation(fields: [fazendaId], references: [id])
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// ============================================================================
+// NOVO: GESTÃO DE COLABORADORES
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// COLABORADOR - Funcionário/trabalhador vinculado a uma fazenda
+// ----------------------------------------------------------------------------
+model Colaborador {
+  id           Int             @id @default(autoincrement())
+  nome         String
+  funcao       String          // cargo/função, ex: "Tratorista", "Encarregado"
+  telefone     String?
+  email        String?
+  dataAdmissao DateTime?
+  salario      Float?          // valor mensal (opcional, sensível)
+  status       String          @default("ativo") // "ativo" | "inativo"
+
+  fazendaId    Int
+  fazenda      Fazenda         @relation(fields: [fazendaId], references: [id])
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  tarefas        Tarefa[]
+  registrosPonto RegistroPonto[]
+}
+
+// ----------------------------------------------------------------------------
+// TAREFA - Atribuição de trabalho a um colaborador (estilo kanban)
+// ----------------------------------------------------------------------------
+model Tarefa {
+  id            Int          @id @default(autoincrement())
+  titulo        String
+  descricao     String?
+  status        String       @default("pendente") // pendente | em_andamento | concluida
+  prioridade    String       @default("media")    // baixa | media | alta
+  dataPrazo     DateTime?
+
+  colaboradorId Int?
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+
+  fazendaId     Int
+  fazenda       Fazenda      @relation(fields: [fazendaId], references: [id])
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+// ----------------------------------------------------------------------------
+// REGISTRO DE PONTO - Controle simplificado de presença/horas trabalhadas
+// ----------------------------------------------------------------------------
+// Um registro por dia/colaborador. "entrada" e "saida" são timestamps;
+// quando ambos estão preenchidos, o dia é considerado completo.
+// ----------------------------------------------------------------------------
+model RegistroPonto {
+  id            Int         @id @default(autoincrement())
+  colaboradorId Int
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+
+  data          DateTime    // referência do dia (apenas a data importa)
+  entrada       DateTime?
+  saida         DateTime?
+  observacao    String?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
