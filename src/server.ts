@@ -18,7 +18,8 @@ import { notificacoesRoutes } from './routes/notificacoes'
 import { assistenteRoutes } from './routes/assistente'
 import { documentosRoutes } from './routes/documentos'
 import { financeiroRoutes } from './routes/financeiro'
-import { colaboradoresRoutes } from './routes/colaboradores' // NOVO
+import { colaboradoresRoutes } from './routes/colaboradores'
+import { estoqueRoutes } from './routes/estoque' // NOVO
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -59,7 +60,8 @@ app.register(notificacoesRoutes, { prefix: '/notificacoes' })
 app.register(assistenteRoutes, { prefix: '/assistente' })
 app.register(documentosRoutes, { prefix: '/documentos' })
 app.register(financeiroRoutes, { prefix: '/financeiro' })
-app.register(colaboradoresRoutes, { prefix: '/colaboradores' }) // NOVO
+app.register(colaboradoresRoutes, { prefix: '/colaboradores' })
+app.register(estoqueRoutes, { prefix: '/estoque' }) // NOVO
 
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 

@@ -66,8 +66,10 @@ model Fazenda {
   documentos     Documento[]
   transacoes     Transacao[]
   financiamentos Financiamento[]
-  colaboradores  Colaborador[]   // NOVO: equipe vinculada à fazenda
-  tarefas        Tarefa[]        // NOVO: tarefas vinculadas à fazenda
+  colaboradores  Colaborador[]
+  tarefas        Tarefa[]
+  insumos        Insumo[]            // NOVO: itens de estoque
+  movimentacoes  MovimentacaoEstoque[] // NOVO: histórico de entrada/saída
 }
 
 // ----------------------------------------------------------------------------
@@ -208,42 +210,38 @@ model Financiamento {
   updatedAt       DateTime  @updatedAt
 }
 
-// ============================================================================
-// NOVO: GESTÃO DE COLABORADORES
-// ============================================================================
-
 // ----------------------------------------------------------------------------
-// COLABORADOR - Funcionário/trabalhador vinculado a uma fazenda
+// COLABORADOR
 // ----------------------------------------------------------------------------
 model Colaborador {
   id           Int             @id @default(autoincrement())
   nome         String
-  funcao       String          // cargo/função, ex: "Tratorista", "Encarregado"
+  funcao       String
   telefone     String?
   email        String?
   dataAdmissao DateTime?
-  salario      Float?          // valor mensal (opcional, sensível)
-  status       String          @default("ativo") // "ativo" | "inativo"
+  salario      Float?
+  status       String          @default("ativo")
 
   fazendaId    Int
   fazenda      Fazenda         @relation(fields: [fazendaId], references: [id])
 
   createdAt    DateTime        @default(now())
-  updatedAt    DateTime         @updatedAt
+  updatedAt    DateTime        @updatedAt
 
   tarefas        Tarefa[]
   registrosPonto RegistroPonto[]
 }
 
 // ----------------------------------------------------------------------------
-// TAREFA - Atribuição de trabalho a um colaborador (estilo kanban)
+// TAREFA
 // ----------------------------------------------------------------------------
 model Tarefa {
   id            Int          @id @default(autoincrement())
   titulo        String
   descricao     String?
-  status        String       @default("pendente") // pendente | em_andamento | concluida
-  prioridade    String       @default("media")    // baixa | media | alta
+  status        String       @default("pendente")
+  prioridade    String       @default("media")
   dataPrazo     DateTime?
 
   colaboradorId Int?
@@ -257,21 +255,69 @@ model Tarefa {
 }
 
 // ----------------------------------------------------------------------------
-// REGISTRO DE PONTO - Controle simplificado de presença/horas trabalhadas
-// ----------------------------------------------------------------------------
-// Um registro por dia/colaborador. "entrada" e "saida" são timestamps;
-// quando ambos estão preenchidos, o dia é considerado completo.
+// REGISTRO DE PONTO
 // ----------------------------------------------------------------------------
 model RegistroPonto {
   id            Int         @id @default(autoincrement())
   colaboradorId Int
   colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
 
-  data          DateTime    // referência do dia (apenas a data importa)
+  data          DateTime
   entrada       DateTime?
   saida         DateTime?
   observacao    String?
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+// ============================================================================
+// NOVO: ESTOQUE DE INSUMOS
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// INSUMO - Item de estoque (semente, fertilizante, defensivo, etc.)
+// ----------------------------------------------------------------------------
+// O campo "quantidade" é a quantidade ATUAL em estoque. Toda alteração nesse
+// valor deve ser feita através de uma MovimentacaoEstoque (entrada/saída),
+// nunca editada diretamente - isso garante histórico e auditoria.
+// ----------------------------------------------------------------------------
+model Insumo {
+  id             Int      @id @default(autoincrement())
+  nome           String
+  categoria      String   // Semente | Fertilizante | Defensivo | Combustível | Outro
+  unidade        String   // kg, L, sc (saco), ton, un
+  quantidade     Float    @default(0) // quantidade atual em estoque
+  estoqueMinimo  Float    @default(0) // dispara alerta quando quantidade <= isso
+  precoUnitario  Float?   // custo médio por unidade (opcional, para relatórios)
+  fornecedor     String?
+
+  fazendaId      Int
+  fazenda        Fazenda  @relation(fields: [fazendaId], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  movimentacoes  MovimentacaoEstoque[]
+}
+
+// ----------------------------------------------------------------------------
+// MOVIMENTACAO ESTOQUE - Histórico de entrada/saída de um insumo
+// ----------------------------------------------------------------------------
+model MovimentacaoEstoque {
+  id          Int      @id @default(autoincrement())
+  tipo        String   // "entrada" | "saida"
+  quantidade  Float    // sempre positiva - o "tipo" define a direção
+  motivo      String?  // ex: "Compra", "Aplicação no setor B", "Perda/avaria"
+  data        DateTime @default(now())
+
+  insumoId    Int
+  insumo      Insumo   @relation(fields: [insumoId], references: [id])
+
+  // Denormalizado para facilitar consultas e relatórios sem precisar
+  // sempre fazer join com Insumo -> Fazenda
+  fazendaId   Int
+  fazenda     Fazenda  @relation(fields: [fazendaId], references: [id])
+
+  createdAt   DateTime @default(now())
 }
