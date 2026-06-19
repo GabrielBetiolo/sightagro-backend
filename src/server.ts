@@ -19,7 +19,8 @@ import { assistenteRoutes } from './routes/assistente'
 import { documentosRoutes } from './routes/documentos'
 import { financeiroRoutes } from './routes/financeiro'
 import { colaboradoresRoutes } from './routes/colaboradores'
-import { estoqueRoutes } from './routes/estoque' // NOVO
+import { estoqueRoutes } from './routes/estoque'
+import { pecuariaRoutes } from './routes/pecuaria' // NOVO
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -29,25 +30,14 @@ declare module 'fastify' {
 
 const app = Fastify({ logger: true })
 
-app.register(cors, {
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-})
-
+app.register(cors, { origin: true, credentials: true, methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'] })
 app.register(jwt, { secret: process.env.JWT_SECRET || 'agrosmart-secret' })
 
 app.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
-  try {
-    await request.jwtVerify()
-  } catch {
-    reply.status(401).send({ message: 'Token inválido ou expirado' })
-  }
+  try { await request.jwtVerify() }
+  catch { reply.status(401).send({ message: 'Token inválido ou expirado' }) }
 })
 
-// ----------------------------------------------------------------------------
-// REGISTRO DE ROTAS
-// ----------------------------------------------------------------------------
 app.register(authRoutes, { prefix: '/auth' })
 app.register(dashboardRoutes, { prefix: '/dashboard' })
 app.register(fazendasRoutes, { prefix: '/fazendas' })
@@ -61,16 +51,14 @@ app.register(assistenteRoutes, { prefix: '/assistente' })
 app.register(documentosRoutes, { prefix: '/documentos' })
 app.register(financeiroRoutes, { prefix: '/financeiro' })
 app.register(colaboradoresRoutes, { prefix: '/colaboradores' })
-app.register(estoqueRoutes, { prefix: '/estoque' }) // NOVO
+app.register(estoqueRoutes, { prefix: '/estoque' })
+app.register(pecuariaRoutes, { prefix: '/pecuaria' }) // NOVO
 
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
 const PORT = Number(process.env.PORT) || 3333
 app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
-  if (err) {
-    app.log.error(err)
-    process.exit(1)
-  }
+  if (err) { app.log.error(err); process.exit(1) }
   console.log(`Servidor rodando na porta ${PORT}`)
 })
 
