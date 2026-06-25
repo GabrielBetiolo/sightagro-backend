@@ -1,4 +1,7 @@
 "use strict";
+// ============================================================================
+// SERVIDOR PRINCIPAL - AGROSMART BACKEND
+// ============================================================================
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -17,6 +20,11 @@ const pagamentos_1 = require("./routes/pagamentos");
 const clima_1 = require("./routes/clima");
 const notificacoes_1 = require("./routes/notificacoes");
 const assistente_1 = require("./routes/assistente");
+const documentos_1 = require("./routes/documentos");
+const financeiro_1 = require("./routes/financeiro");
+const colaboradores_1 = require("./routes/colaboradores");
+const estoque_1 = require("./routes/estoque");
+const pecuaria_1 = require("./routes/pecuaria"); // NOVO
 const app = (0, fastify_1.default)({ logger: true });
 exports.app = app;
 app.register(cors_1.default, { origin: true, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
@@ -39,6 +47,11 @@ app.register(pagamentos_1.pagamentosRoutes, { prefix: '/pagamentos' });
 app.register(clima_1.climaRoutes, { prefix: '/clima' });
 app.register(notificacoes_1.notificacoesRoutes, { prefix: '/notificacoes' });
 app.register(assistente_1.assistenteRoutes, { prefix: '/assistente' });
+app.register(documentos_1.documentosRoutes, { prefix: '/documentos' });
+app.register(financeiro_1.financeiroRoutes, { prefix: '/financeiro' });
+app.register(colaboradores_1.colaboradoresRoutes, { prefix: '/colaboradores' });
+app.register(estoque_1.estoqueRoutes, { prefix: '/estoque' });
+app.register(pecuaria_1.pecuariaRoutes, { prefix: '/pecuaria' }); // NOVO
 app.get('/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 const PORT = Number(process.env.PORT) || 3333;
 app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {

@@ -1,15 +1,12 @@
 // ============================================================================
-// ROTA: /estoque
+// ROTA: /financeiro
 // ============================================================================
-// Controle de estoque de insumos rurais: sementes, fertilizantes,
-// defensivos, combustível, etc.
-//
-// REGRA IMPORTANTE: a quantidade de um Insumo NUNCA é editada diretamente.
-// Toda alteração de quantidade passa por uma MovimentacaoEstoque (entrada
-// ou saída), garantindo histórico completo e rastreabilidade.
-//
-// Quando uma saída faz o estoque cair para igual ou abaixo do
-// "estoqueMinimo" definido, um alerta é gerado automaticamente.
+// Gestão financeira rural: lançamentos de receitas/despesas (Transacao) e
+// controle de financiamentos/CPR (Financiamento), com:
+//   - CRUD completo de transações e financiamentos
+//   - Resumo financeiro (totais, saldo, breakdown por categoria)
+//   - Geração automática de alertas para financiamentos vencendo/vencidos
+//     (mesmo padrão usado em /documentos)
 // ============================================================================
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
@@ -18,65 +15,82 @@ import { z } from 'zod'
 
 const prisma = new PrismaClient()
 
-export const CATEGORIAS_INSUMO = ['Semente', 'Fertilizante', 'Defensivo', 'Combustível', 'Outro'] as const
-export const UNIDADES_INSUMO = ['kg', 'L', 'sc', 'ton', 'un'] as const
+// Categorias sugeridas (o frontend usa essa lista, mas o campo é livre/string
+// para não travar o usuário em categorias pré-definidas)
+export const CATEGORIAS_RECEITA = ['Venda de produção', 'Arrendamento', 'Subsídio/Incentivo', 'Outros'] as const
+export const CATEGORIAS_DESPESA = ['Insumos', 'Maquinário', 'Mão de obra', 'Combustível', 'Manutenção', 'Impostos/Taxas', 'Outros'] as const
 
-export async function estoqueRoutes(app: FastifyInstance) {
-  const auth = async (req: FastifyRequest, rep: FastifyReply) => {
-    await app.authenticate(req, rep)
-  }
+const DIAS_AVISO_VENCIMENTO_FINANCIAMENTO = 15
+
+/**
+ * Calcula o status de um financiamento com base na data de vencimento.
+ * Reaproveita a mesma lógica usada para documentos (ver routes/documentos.ts).
+ */
+function calcularStatusFinanciamento(
+  dataVencimento: Date | null,
+  statusAtual: string
+): 'pago' | 'vencido' | 'vencendo' | 'ativo' {
+  if (statusAtual === 'pago') return 'pago'
+  if (!dataVencimento) return 'ativo'
+
+  const diffDias = (dataVencimento.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  if (diffDias < 0) return 'vencido'
+  if (diffDias <= DIAS_AVISO_VENCIMENTO_FINANCIAMENTO) return 'vencendo'
+  return 'ativo'
+}
+
+export async function financeiroRoutes(app: FastifyInstance) {
+  const auth = async (req: FastifyRequest, rep: FastifyReply) => { await app.authenticate(req, rep) }
 
   // ==========================================================================
-  // INSUMOS (itens de estoque)
+  // TRANSAÇÕES (Receitas e Despesas)
   // ==========================================================================
 
   // --------------------------------------------------------------------
-  // GET /estoque
-  // Lista insumos do usuário com flag "estoqueBaixo" calculada.
-  // Query: ?fazendaId= | ?categoria= | ?estoqueBaixo=true
+  // GET /financeiro/transacoes
+  // Lista transações do usuário, com filtros opcionais via query string:
+  //   ?fazendaId=1        -> filtra por fazenda
+  //   ?tipo=receita        -> "receita" | "despesa"
+  //   ?inicio=2026-01-01&fim=2026-01-31 -> filtra por período (ISO date)
   // --------------------------------------------------------------------
-  app.get('/', { preHandler: auth }, async (request) => {
+  app.get('/transacoes', { preHandler: auth }, async (request) => {
     const payload = request.user as { id: number }
-    const { fazendaId, categoria, estoqueBaixo } = request.query as {
-      fazendaId?: string; categoria?: string; estoqueBaixo?: string
+    const { fazendaId, tipo, inicio, fim } = request.query as {
+      fazendaId?: string; tipo?: string; inicio?: string; fim?: string
     }
 
-    const insumos = await prisma.insumo.findMany({
+    return prisma.transacao.findMany({
       where: {
         fazenda: { userId: payload.id },
         ...(fazendaId && { fazendaId: Number(fazendaId) }),
-        ...(categoria && { categoria })
+        ...(tipo && { tipo }),
+        ...(inicio || fim
+          ? {
+              data: {
+                ...(inicio && { gte: new Date(inicio) }),
+                ...(fim && { lte: new Date(fim) })
+              }
+            }
+          : {})
       },
       include: { fazenda: { select: { id: true, nome: true } } },
-      orderBy: { nome: 'asc' }
+      orderBy: { data: 'desc' }
     })
-
-    // Adiciona flag calculada e filtra se solicitado
-    const comFlag = insumos.map((i) => ({ ...i, estoqueBaixo: i.quantidade <= i.estoqueMinimo }))
-
-    if (estoqueBaixo === 'true') {
-      return comFlag.filter((i) => i.estoqueBaixo)
-    }
-    return comFlag
   })
 
   // --------------------------------------------------------------------
-  // POST /estoque
-  // Cria um novo insumo. A quantidade inicial é registrada também como
-  // uma MovimentacaoEstoque do tipo "entrada" (motivo: "Cadastro inicial"),
-  // para manter o histórico consistente desde o início.
+  // POST /financeiro/transacoes
+  // Cria um novo lançamento (receita ou despesa)
   // --------------------------------------------------------------------
-  app.post('/', { preHandler: auth }, async (request, reply) => {
+  app.post('/transacoes', { preHandler: auth }, async (request, reply) => {
     const payload = request.user as { id: number }
 
     const schema = z.object({
-      nome: z.string().min(1),
-      categoria: z.enum(CATEGORIAS_INSUMO),
-      unidade: z.enum(UNIDADES_INSUMO),
-      quantidade: z.number().min(0).default(0),
-      estoqueMinimo: z.number().min(0).default(0),
-      precoUnitario: z.number().positive().optional(),
-      fornecedor: z.string().optional(),
+      tipo: z.enum(['receita', 'despesa']),
+      categoria: z.string().min(1),
+      descricao: z.string().min(1),
+      valor: z.number().positive('O valor deve ser maior que zero'),
+      data: z.string().datetime(),
       fazendaId: z.number()
     })
 
@@ -85,232 +99,290 @@ export async function estoqueRoutes(app: FastifyInstance) {
 
     const data = result.data
 
+    // Garante que a fazenda pertence ao usuário autenticado
     const fazenda = await prisma.fazenda.findFirst({ where: { id: data.fazendaId, userId: payload.id } })
     if (!fazenda) return reply.status(404).send({ message: 'Fazenda não encontrada' })
 
-    // Cria o insumo e, se houver quantidade inicial, registra a movimentação
-    const insumo = await prisma.insumo.create({
+    const transacao = await prisma.transacao.create({
       data: {
-        nome: data.nome,
+        tipo: data.tipo,
         categoria: data.categoria,
-        unidade: data.unidade,
-        quantidade: data.quantidade,
-        estoqueMinimo: data.estoqueMinimo,
-        precoUnitario: data.precoUnitario ?? null,
-        fornecedor: data.fornecedor || null,
+        descricao: data.descricao,
+        valor: data.valor,
+        data: new Date(data.data),
         fazenda: { connect: { id: data.fazendaId } }
       }
     })
 
-    if (data.quantidade > 0) {
-      await prisma.movimentacaoEstoque.create({
-        data: {
-          tipo: 'entrada',
-          quantidade: data.quantidade,
-          motivo: 'Cadastro inicial',
-          insumo: { connect: { id: insumo.id } },
-          fazenda: { connect: { id: data.fazendaId } }
-        }
-      })
-    }
-
-    return reply.status(201).send({ ...insumo, estoqueBaixo: insumo.quantidade <= insumo.estoqueMinimo })
+    return reply.status(201).send(transacao)
   })
 
   // --------------------------------------------------------------------
-  // PUT /estoque/:id
-  // Atualiza metadados do insumo (NÃO altera quantidade - isso é feito
-  // exclusivamente via /estoque/:id/movimentacao)
+  // PUT /financeiro/transacoes/:id
   // --------------------------------------------------------------------
-  app.put('/:id', { preHandler: auth }, async (request, reply) => {
+  app.put('/transacoes/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
 
     const schema = z.object({
-      nome: z.string().min(1).optional(),
-      categoria: z.enum(CATEGORIAS_INSUMO).optional(),
-      unidade: z.enum(UNIDADES_INSUMO).optional(),
-      estoqueMinimo: z.number().min(0).optional(),
-      precoUnitario: z.number().positive().optional().or(z.null()),
-      fornecedor: z.string().optional().or(z.null())
+      tipo: z.enum(['receita', 'despesa']).optional(),
+      categoria: z.string().min(1).optional(),
+      descricao: z.string().min(1).optional(),
+      valor: z.number().positive().optional(),
+      data: z.string().datetime().optional()
     })
 
     const result = schema.safeParse(request.body)
     if (!result.success) return reply.status(400).send({ message: result.error.errors[0].message })
 
-    const existente = await prisma.insumo.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
-    if (!existente) return reply.status(404).send({ message: 'Insumo não encontrado' })
+    const existente = await prisma.transacao.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
+    if (!existente) return reply.status(404).send({ message: 'Transação não encontrada' })
 
     const d = result.data
-    const insumo = await prisma.insumo.update({
+    return prisma.transacao.update({
       where: { id: Number(id) },
       data: {
-        ...(d.nome !== undefined && { nome: d.nome }),
+        ...(d.tipo !== undefined && { tipo: d.tipo }),
         ...(d.categoria !== undefined && { categoria: d.categoria }),
-        ...(d.unidade !== undefined && { unidade: d.unidade }),
-        ...(d.estoqueMinimo !== undefined && { estoqueMinimo: d.estoqueMinimo }),
-        ...(d.precoUnitario !== undefined && { precoUnitario: d.precoUnitario }),
-        ...(d.fornecedor !== undefined && { fornecedor: d.fornecedor })
+        ...(d.descricao !== undefined && { descricao: d.descricao }),
+        ...(d.valor !== undefined && { valor: d.valor }),
+        ...(d.data !== undefined && { data: new Date(d.data) })
       }
     })
-
-    return { ...insumo, estoqueBaixo: insumo.quantidade <= insumo.estoqueMinimo }
   })
 
   // --------------------------------------------------------------------
-  // DELETE /estoque/:id
-  // Remove o insumo e todo o histórico de movimentações associado
+  // DELETE /financeiro/transacoes/:id
   // --------------------------------------------------------------------
-  app.delete('/:id', { preHandler: auth }, async (request, reply) => {
+  app.delete('/transacoes/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
 
-    const existente = await prisma.insumo.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
-    if (!existente) return reply.status(404).send({ message: 'Insumo não encontrado' })
+    const existente = await prisma.transacao.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
+    if (!existente) return reply.status(404).send({ message: 'Transação não encontrada' })
 
-    await prisma.movimentacaoEstoque.deleteMany({ where: { insumoId: Number(id) } })
-    await prisma.insumo.delete({ where: { id: Number(id) } })
-
+    await prisma.transacao.delete({ where: { id: Number(id) } })
     return reply.status(204).send()
   })
 
+  // --------------------------------------------------------------------
+  // GET /financeiro/resumo
+  // Retorna totais consolidados para o período/fazenda informados:
+  //   - total de receitas, despesas e saldo
+  //   - breakdown de despesas por categoria (para gráficos)
+  //   - breakdown de receitas por categoria
+  // Query params: ?fazendaId=&inicio=&fim=  (mesmos filtros de /transacoes)
+  // --------------------------------------------------------------------
+  app.get('/resumo', { preHandler: auth }, async (request) => {
+    const payload = request.user as { id: number }
+    const { fazendaId, inicio, fim } = request.query as { fazendaId?: string; inicio?: string; fim?: string }
+
+    const transacoes = await prisma.transacao.findMany({
+      where: {
+        fazenda: { userId: payload.id },
+        ...(fazendaId && { fazendaId: Number(fazendaId) }),
+        ...(inicio || fim
+          ? { data: { ...(inicio && { gte: new Date(inicio) }), ...(fim && { lte: new Date(fim) }) } }
+          : {})
+      }
+    })
+
+    let totalReceitas = 0
+    let totalDespesas = 0
+    const porCategoria: Record<string, { receita: number; despesa: number }> = {}
+
+    for (const t of transacoes) {
+      if (t.tipo === 'receita') totalReceitas += t.valor
+      else totalDespesas += t.valor
+
+      if (!porCategoria[t.categoria]) porCategoria[t.categoria] = { receita: 0, despesa: 0 }
+      porCategoria[t.categoria][t.tipo as 'receita' | 'despesa'] += t.valor
+    }
+
+    return {
+      totalReceitas,
+      totalDespesas,
+      saldo: totalReceitas - totalDespesas,
+      totalLancamentos: transacoes.length,
+      porCategoria
+    }
+  })
+
   // ==========================================================================
-  // MOVIMENTAÇÕES (entrada / saída de estoque)
+  // FINANCIAMENTOS / CPR
   // ==========================================================================
 
   // --------------------------------------------------------------------
-  // POST /estoque/:id/movimentacao
-  // Registra uma entrada ou saída e atualiza a quantidade do insumo
-  // de forma ATÔMICA (usando transação do Prisma) para evitar
-  // inconsistências em caso de concorrência.
-  //
-  // Se o tipo for "saida" e a quantidade solicitada for maior que o
-  // estoque atual, a operação é REJEITADA (não permite estoque negativo).
+  // GET /financeiro/financiamentos
+  // Lista financiamentos/CPR com status calculado dinamicamente
   // --------------------------------------------------------------------
-  app.post('/:id/movimentacao', { preHandler: auth }, async (request, reply) => {
-    const { id } = request.params as { id: string }
+  app.get('/financiamentos', { preHandler: auth }, async (request) => {
+    const payload = request.user as { id: number }
+
+    const financiamentos = await prisma.financiamento.findMany({
+      where: { fazenda: { userId: payload.id } },
+      include: { fazenda: { select: { id: true, nome: true } } },
+      orderBy: { dataVencimento: 'asc' }
+    })
+
+    return financiamentos.map((f) => ({
+      ...f,
+      statusCalculado: calcularStatusFinanciamento(f.dataVencimento, f.status)
+    }))
+  })
+
+  // --------------------------------------------------------------------
+  // POST /financeiro/financiamentos
+  // --------------------------------------------------------------------
+  app.post('/financiamentos', { preHandler: auth }, async (request, reply) => {
     const payload = request.user as { id: number }
 
     const schema = z.object({
-      tipo: z.enum(['entrada', 'saida']),
-      quantidade: z.number().positive('A quantidade deve ser maior que zero'),
-      motivo: z.string().optional()
+      tipo: z.enum(['CPR', 'Financiamento', 'Outro']),
+      instituicao: z.string().min(1),
+      descricao: z.string().optional(),
+      valor: z.number().positive(),
+      taxaJuros: z.number().optional(),
+      dataContratacao: z.string().datetime().optional().or(z.literal('')),
+      dataVencimento: z.string().datetime().optional().or(z.literal('')),
+      fazendaId: z.number()
     })
 
     const result = schema.safeParse(request.body)
     if (!result.success) return reply.status(400).send({ message: result.error.errors[0].message })
 
-    const insumo = await prisma.insumo.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
-    if (!insumo) return reply.status(404).send({ message: 'Insumo não encontrado' })
+    const data = result.data
+    const fazenda = await prisma.fazenda.findFirst({ where: { id: data.fazendaId, userId: payload.id } })
+    if (!fazenda) return reply.status(404).send({ message: 'Fazenda não encontrada' })
 
-    const { tipo, quantidade, motivo } = result.data
-
-    if (tipo === 'saida' && quantidade > insumo.quantidade) {
-      return reply.status(400).send({
-        message: `Estoque insuficiente. Disponível: ${insumo.quantidade} ${insumo.unidade}`
-      })
-    }
-
-    const novaQuantidade = tipo === 'entrada' ? insumo.quantidade + quantidade : insumo.quantidade - quantidade
-
-    // Transação: garante que a movimentação e a atualização de quantidade
-    // aconteçam juntas (ou nenhuma das duas, em caso de erro)
-    const [movimentacao, insumoAtualizado] = await prisma.$transaction([
-      prisma.movimentacaoEstoque.create({
-        data: {
-          tipo,
-          quantidade,
-          motivo: motivo || null,
-          insumo: { connect: { id: insumo.id } },
-          fazenda: { connect: { id: insumo.fazendaId } }
-        }
-      }),
-      prisma.insumo.update({
-        where: { id: insumo.id },
-        data: { quantidade: novaQuantidade }
-      })
-    ])
-
-    // Gera alerta automático se o estoque ficou baixo após a saída
-    if (tipo === 'saida' && novaQuantidade <= insumo.estoqueMinimo) {
-      const tituloAlerta = `Estoque baixo: ${insumo.nome}`
-      const existeAlerta = await prisma.alerta.findFirst({
-        where: {
-          fazendaId: insumo.fazendaId,
-          titulo: tituloAlerta,
-          createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) }
-        }
-      })
-      if (!existeAlerta) {
-        await prisma.alerta.create({
-          data: {
-            tipo: 'warning',
-            titulo: tituloAlerta,
-            descricao: `Restam apenas ${novaQuantidade} ${insumo.unidade} de ${insumo.nome} (mínimo definido: ${insumo.estoqueMinimo}).`,
-            fazendaId: insumo.fazendaId
-          }
-        })
+    const financiamento = await prisma.financiamento.create({
+      data: {
+        tipo: data.tipo,
+        instituicao: data.instituicao,
+        descricao: data.descricao || null,
+        valor: data.valor,
+        taxaJuros: data.taxaJuros ?? null,
+        dataContratacao: data.dataContratacao ? new Date(data.dataContratacao) : null,
+        dataVencimento: data.dataVencimento ? new Date(data.dataVencimento) : null,
+        fazenda: { connect: { id: data.fazendaId } }
       }
-    }
+    })
 
     return reply.status(201).send({
-      movimentacao,
-      insumo: { ...insumoAtualizado, estoqueBaixo: insumoAtualizado.quantidade <= insumoAtualizado.estoqueMinimo }
+      ...financiamento,
+      statusCalculado: calcularStatusFinanciamento(financiamento.dataVencimento, financiamento.status)
     })
   })
 
   // --------------------------------------------------------------------
-  // GET /estoque/:id/movimentacoes
-  // Histórico de movimentações de um insumo específico
+  // PUT /financeiro/financiamentos/:id
+  // Permite, entre outras coisas, marcar como "pago"
   // --------------------------------------------------------------------
-  app.get('/:id/movimentacoes', { preHandler: auth }, async (request, reply) => {
+  app.put('/financiamentos/:id', { preHandler: auth }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const payload = request.user as { id: number }
 
-    const insumo = await prisma.insumo.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
-    if (!insumo) return reply.status(404).send({ message: 'Insumo não encontrado' })
-
-    return prisma.movimentacaoEstoque.findMany({
-      where: { insumoId: Number(id) },
-      orderBy: { data: 'desc' }
+    const schema = z.object({
+      tipo: z.enum(['CPR', 'Financiamento', 'Outro']).optional(),
+      instituicao: z.string().min(1).optional(),
+      descricao: z.string().optional().or(z.null()),
+      valor: z.number().positive().optional(),
+      taxaJuros: z.number().optional().or(z.null()),
+      dataContratacao: z.string().datetime().optional().or(z.literal('')).or(z.null()),
+      dataVencimento: z.string().datetime().optional().or(z.literal('')).or(z.null()),
+      status: z.enum(['ativo', 'pago', 'vencido']).optional()
     })
-  })
 
-  // --------------------------------------------------------------------
-  // GET /estoque/resumo
-  // Resumo geral do estoque: total de itens, itens com estoque baixo,
-  // valor total estimado (quantidade × precoUnitario) por categoria.
-  // --------------------------------------------------------------------
-  app.get('/resumo', { preHandler: auth }, async (request) => {
-    const payload = request.user as { id: number }
-    const { fazendaId } = request.query as { fazendaId?: string }
+    const result = schema.safeParse(request.body)
+    if (!result.success) return reply.status(400).send({ message: result.error.errors[0].message })
 
-    const insumos = await prisma.insumo.findMany({
-      where: {
-        fazenda: { userId: payload.id },
-        ...(fazendaId && { fazendaId: Number(fazendaId) })
+    const existente = await prisma.financiamento.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
+    if (!existente) return reply.status(404).send({ message: 'Financiamento não encontrado' })
+
+    const d = result.data
+    const financiamento = await prisma.financiamento.update({
+      where: { id: Number(id) },
+      data: {
+        ...(d.tipo !== undefined && { tipo: d.tipo }),
+        ...(d.instituicao !== undefined && { instituicao: d.instituicao }),
+        ...(d.descricao !== undefined && { descricao: d.descricao || null }),
+        ...(d.valor !== undefined && { valor: d.valor }),
+        ...(d.taxaJuros !== undefined && { taxaJuros: d.taxaJuros }),
+        ...(d.dataContratacao !== undefined && { dataContratacao: d.dataContratacao ? new Date(d.dataContratacao) : null }),
+        ...(d.dataVencimento !== undefined && { dataVencimento: d.dataVencimento ? new Date(d.dataVencimento) : null }),
+        ...(d.status !== undefined && { status: d.status })
       }
     })
 
-    let valorTotalEstoque = 0
-    let itensEstoqueBaixo = 0
-    const porCategoria: Record<string, { itens: number; valor: number }> = {}
+    return { ...financiamento, statusCalculado: calcularStatusFinanciamento(financiamento.dataVencimento, financiamento.status) }
+  })
 
-    for (const i of insumos) {
-      const valorItem = (i.precoUnitario || 0) * i.quantidade
-      valorTotalEstoque += valorItem
-      if (i.quantidade <= i.estoqueMinimo) itensEstoqueBaixo++
+  // --------------------------------------------------------------------
+  // DELETE /financeiro/financiamentos/:id
+  // --------------------------------------------------------------------
+  app.delete('/financiamentos/:id', { preHandler: auth }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const payload = request.user as { id: number }
 
-      if (!porCategoria[i.categoria]) porCategoria[i.categoria] = { itens: 0, valor: 0 }
-      porCategoria[i.categoria].itens++
-      porCategoria[i.categoria].valor += valorItem
+    const existente = await prisma.financiamento.findFirst({ where: { id: Number(id), fazenda: { userId: payload.id } } })
+    if (!existente) return reply.status(404).send({ message: 'Financiamento não encontrado' })
+
+    await prisma.financiamento.delete({ where: { id: Number(id) } })
+    return reply.status(204).send()
+  })
+
+  // --------------------------------------------------------------------
+  // POST /financeiro/verificar-vencimentos
+  // Gera alertas para financiamentos/CPR vencidos ou vencendo em breve.
+  // Mesmo padrão usado em /documentos/verificar-vencimentos.
+  // --------------------------------------------------------------------
+  app.post('/verificar-vencimentos', { preHandler: auth }, async (request) => {
+    const payload = request.user as { id: number }
+
+    const financiamentos = await prisma.financiamento.findMany({
+      where: {
+        fazenda: { userId: payload.id },
+        dataVencimento: { not: null },
+        status: { not: 'pago' }
+      },
+      include: { fazenda: { select: { id: true, nome: true } } }
+    })
+
+    let alertasGerados = 0
+
+    for (const f of financiamentos) {
+      const status = calcularStatusFinanciamento(f.dataVencimento, f.status)
+      if (status !== 'vencido' && status !== 'vencendo') continue
+
+      const titulo = status === 'vencido'
+        ? `${f.tipo} vencido: ${f.instituicao}`
+        : `${f.tipo} próximo do vencimento: ${f.instituicao}`
+
+      const dataFormatada = f.dataVencimento?.toLocaleDateString('pt-BR')
+      const descricao = `${f.tipo} de ${f.instituicao} no valor de R$ ${f.valor.toFixed(2)} ` +
+        `${status === 'vencido' ? 'venceu' : 'vence'} em ${dataFormatada} (fazenda ${f.fazenda.nome}).`
+
+      const existeAlerta = await prisma.alerta.findFirst({
+        where: {
+          fazendaId: f.fazenda.id,
+          titulo,
+          createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) }
+        }
+      })
+
+      if (!existeAlerta) {
+        await prisma.alerta.create({
+          data: {
+            tipo: status === 'vencido' ? 'danger' : 'warning',
+            titulo,
+            descricao,
+            fazendaId: f.fazenda.id
+          }
+        })
+        alertasGerados++
+      }
     }
 
-    return {
-      totalItens: insumos.length,
-      itensEstoqueBaixo,
-      valorTotalEstoque,
-      porCategoria
-    }
+    return { alertasGerados }
   })
 }
