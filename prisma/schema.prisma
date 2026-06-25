@@ -1,10 +1,8 @@
-// schema.prisma — SightAgro
-// Acumula TODOS os modelos do projeto (substitui o arquivo existente)
-// Migration: npx prisma migrate dev --name add_praga
+// schema.prisma — SightAgro (versão completa acumulada)
+// Migration: npx prisma migrate dev --name add_mapa_talhoes_maquinarios
 
 generator client {
   provider      = "prisma-client-js"
-  // binaryTargets necessário para o Render (Linux)
   binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
@@ -24,8 +22,8 @@ model User {
   idioma        String?   @default("pt")
   fusoHorario   String?   @default("America/Sao_Paulo")
   tema          String?   @default("dark")
-  plano         String    @default("free")    // free | pro | enterprise
-  assinaturaId  String?                        // ID da assinatura no Mercado Pago
+  plano         String    @default("free")
+  assinaturaId  String?
   resetToken    String?
   resetTokenExp DateTime?
   createdAt     DateTime  @default(now())
@@ -33,30 +31,34 @@ model User {
 
   fazendas      Fazenda[]
   colaboradores Colaborador[]
+  insumosEstoque InsumoEstoque[]
+  maquinarios   Maquinario[]    // ← NOVO
 }
 
 // ─── Fazenda ──────────────────────────────────────────────────────────────────
 model Fazenda {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  nome       String
-  localizacao String?
-  latitude   Float?
-  longitude  Float?
-  areaHa     Float?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  nome         String
+  localizacao  String?
+  latitude     Float?
+  longitude    Float?
+  areaHa       Float?
+  mapaPoligono String?  // GeoJSON da área total ← NOVO
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user       User       @relation(fields: [userId], references: [id])
-  sensores   Sensor[]
-  alertas    Alerta[]
-  irrigacoes Irrigacao[]
-  documentos Documento[]
-  transacoes TransacaoFinanceira[]
-  insumosMovimentacoes MovimentacaoEstoque[]
-  lotes      Lote[]           // Pecuária
-  tanques    Tanque[]         // Aquicultura
-  pragas     Praga[]          // Manejo de Pragas ← NOVO
+  user         User       @relation(fields: [userId], references: [id])
+  sensores     Sensor[]
+  alertas      Alerta[]
+  irrigacoes   Irrigacao[]
+  documentos   Documento[]
+  transacoes   TransacaoFinanceira[]
+  movimentacoes MovimentacaoEstoque[]
+  lotes        Lote[]
+  tanques      Tanque[]
+  pragas       Praga[]
+  talhoes      Talhao[]   // ← NOVO
 }
 
 // ─── Sensor ───────────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ model Sensor {
   fazendaId Int
   nome      String
   codigo    String   @unique
-  tipo      String   // temperatura | umidade | solo | ph | outros
+  tipo      String
   ativo     Boolean  @default(true)
   token     String   @unique @default(cuid())
   createdAt DateTime @default(now())
@@ -74,7 +76,6 @@ model Sensor {
   leituras  Leitura[]
 }
 
-// ─── Leitura de Sensor ────────────────────────────────────────────────────────
 model Leitura {
   id        Int      @id @default(autoincrement())
   sensorId  Int
@@ -89,10 +90,10 @@ model Leitura {
 model Alerta {
   id        Int      @id @default(autoincrement())
   fazendaId Int
-  tipo      String   // sensor | clima | irrigacao | praga | documento | financeiro | estoque
+  tipo      String
   titulo    String
   mensagem  String
-  nivel     String   // info | medio | alto | critico
+  nivel     String
   lido      Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -104,9 +105,9 @@ model Irrigacao {
   id          Int      @id @default(autoincrement())
   fazendaId   Int
   nome        String
-  tipo        String   // gotejamento | aspersao | pivô | manual
-  status      String   @default("inativo") // ativo | inativo | programado
-  agendamento String?  // cron ou horário
+  tipo        String
+  status      String   @default("inativo")
+  agendamento String?
   duracaoMin  Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -114,7 +115,7 @@ model Irrigacao {
   fazenda     Fazenda @relation(fields: [fazendaId], references: [id])
 }
 
-// ─── Notificação Push ─────────────────────────────────────────────────────────
+// ─── Push Notifications ───────────────────────────────────────────────────────
 model PushSubscription {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -126,42 +127,42 @@ model PushSubscription {
 
 // ─── Documento Rural ─────────────────────────────────────────────────────────
 model Documento {
-  id          Int       @id @default(autoincrement())
-  fazendaId   Int
-  nome        String
-  tipo        String    // incra | itr | ccir | matricula | gta | licenca | outro
-  numero      String?
-  dataEmissao DateTime?
+  id             Int       @id @default(autoincrement())
+  fazendaId      Int
+  nome           String
+  tipo           String
+  numero         String?
+  dataEmissao    DateTime?
   dataVencimento DateTime?
-  urlArquivo  String?   // Cloudinary URL
-  observacoes String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  urlArquivo     String?
+  observacoes    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  fazenda     Fazenda   @relation(fields: [fazendaId], references: [id])
+  fazenda        Fazenda   @relation(fields: [fazendaId], references: [id])
 }
 
 // ─── Financeiro ───────────────────────────────────────────────────────────────
 model TransacaoFinanceira {
   id          Int      @id @default(autoincrement())
   fazendaId   Int
-  tipo        String   // receita | despesa
-  categoria   String   // semente | fertilizante | defensivo | maquinario | mao_obra | venda | outro
+  tipo        String
+  categoria   String
   descricao   String
   valor       Float
   data        DateTime
-  comprovante String?  // URL Cloudinary
+  comprovante String?
   createdAt   DateTime @default(now())
 
   fazenda     Fazenda  @relation(fields: [fazendaId], references: [id])
 }
 
-// ─── Colaborador ──────────────────────────────────────────────────────────────
+// ─── Colaboradores ────────────────────────────────────────────────────────────
 model Colaborador {
   id        Int      @id @default(autoincrement())
-  userId    Int      // dono da conta
+  userId    Int
   nome      String
-  funcao    String   // operador | tratorista | agrônomo | gerente | outro
+  funcao    String
   telefone  String?
   email     String?
   salario   Float?
@@ -179,8 +180,8 @@ model Tarefa {
   colaboradorId Int
   titulo        String
   descricao     String?
-  status        String      @default("pendente") // pendente | em_andamento | concluida
-  prioridade    String      @default("normal")   // baixa | normal | alta
+  status        String      @default("pendente")
+  prioridade    String      @default("normal")
   dataLimite    DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -194,3 +195,236 @@ model RegistroPonto {
   data          DateTime    @default(now())
   entrada       DateTime
   saida         DateTime?
+  observacao    String?
+
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+}
+
+// ─── Estoque de Insumos ───────────────────────────────────────────────────────
+model InsumoEstoque {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  nome             String
+  categoria        String
+  unidade          String
+  quantidadeAtual  Float    @default(0)
+  quantidadeMinima Float    @default(0)
+  custo            Float?
+  fornecedor       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user          User   @relation(fields: [userId], references: [id])
+  movimentacoes MovimentacaoEstoque[]
+}
+
+model MovimentacaoEstoque {
+  id         Int      @id @default(autoincrement())
+  insumoId   Int
+  fazendaId  Int?
+  tipo       String
+  quantidade Float
+  motivo     String?
+  data       DateTime @default(now())
+
+  insumo     InsumoEstoque @relation(fields: [insumoId], references: [id])
+  fazenda    Fazenda?      @relation(fields: [fazendaId], references: [id])
+}
+
+// ─── Pecuária ────────────────────────────────────────────────────────────────
+model Lote {
+  id         Int      @id @default(autoincrement())
+  fazendaId  Int
+  nome       String
+  especie    String
+  categoria  String
+  quantidade Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  fazenda    Fazenda    @relation(fields: [fazendaId], references: [id])
+  animais    Animal[]
+  vacinacoes Vacinacao[]
+  gtas       GTA[]
+}
+
+model Animal {
+  id           Int       @id @default(autoincrement())
+  loteId       Int
+  numeroBrinco String?   @unique
+  nome         String?
+  dataNasc     DateTime?
+  sexo         String?
+  raca         String?
+  createdAt    DateTime  @default(now())
+
+  lote         Lote      @relation(fields: [loteId], references: [id])
+  pesagens     Pesagem[]
+}
+
+model Pesagem {
+  id         Int      @id @default(autoincrement())
+  animalId   Int
+  pesoKg     Float
+  data       DateTime @default(now())
+  observacao String?
+
+  animal     Animal   @relation(fields: [animalId], references: [id])
+}
+
+model Vacinacao {
+  id            Int      @id @default(autoincrement())
+  loteId        Int
+  vacina        String
+  dataAplicacao DateTime
+  proximaDose   DateTime?
+  doseMl        Float?
+  veterinario   String?
+
+  lote          Lote     @relation(fields: [loteId], references: [id])
+}
+
+model GTA {
+  id             Int      @id @default(autoincrement())
+  loteId         Int
+  numero         String
+  dataEmissao    DateTime
+  dataVencimento DateTime
+  destino        String?
+  urlArquivo     String?
+
+  lote           Lote     @relation(fields: [loteId], references: [id])
+}
+
+// ─── Aquicultura ─────────────────────────────────────────────────────────────
+model Tanque {
+  id               Int      @id @default(autoincrement())
+  fazendaId        Int
+  nome             String
+  tipo             String
+  volumeM3         Float?
+  especie          String
+  quantidadePeixes Int?
+  dataPovoamento   DateTime?
+  cicloAtivo       Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  fazenda          Fazenda  @relation(fields: [fazendaId], references: [id])
+  medicoes         MedicaoAgua[]
+  alimentacoes     Alimentacao[]
+  colheitas        ColheitaAquicultura[]
+}
+
+model MedicaoAgua {
+  id          Int      @id @default(autoincrement())
+  tanqueId    Int
+  temperatura Float?
+  ph          Float?
+  oxigenio    Float?
+  amonia      Float?
+  turbidez    Float?
+  data        DateTime @default(now())
+  observacao  String?
+
+  tanque      Tanque   @relation(fields: [tanqueId], references: [id])
+}
+
+model Alimentacao {
+  id           Int      @id @default(autoincrement())
+  tanqueId     Int
+  tipoRacao    String
+  quantidadeKg Float
+  data         DateTime @default(now())
+
+  tanque       Tanque   @relation(fields: [tanqueId], references: [id])
+}
+
+model ColheitaAquicultura {
+  id           Int      @id @default(autoincrement())
+  tanqueId     Int
+  quantidadeKg Float
+  pesoMedioG   Float?
+  data         DateTime @default(now())
+  observacao   String?
+
+  tanque       Tanque   @relation(fields: [tanqueId], references: [id])
+}
+
+// ─── Manejo de Pragas ─────────────────────────────────────────────────────────
+model Praga {
+  id                Int      @id @default(autoincrement())
+  fazendaId         Int
+  cultura           String
+  tipoProblema      String
+  descricao         String
+  areaAfetadaHa     Float?
+  fotoUrl           String?
+  urgencia          String   @default("media")
+  status            String   @default("aberta")
+  notasAdicionais   String?
+  defensivoAplicado String?
+  dataAplicacao     DateTime?
+  diagnosticoIA     String?
+  defensivosIA      String?
+  manejoIA          String?
+  prevencaoIA       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  fazenda           Fazenda  @relation(fields: [fazendaId], references: [id])
+}
+
+// ─── Mapa da Propriedade ─────────────────────────────────────────────────────  ← NOVOS
+
+// Talhão: subdivisão de uma fazenda com cultura plantada
+model Talhao {
+  id        Int      @id @default(autoincrement())
+  fazendaId Int
+  nome      String                           // "Talhão Norte", "Área 2 - Soja"
+  cultura   String?                          // Soja, Milho, Pastagem, etc.
+  areaHa    Float?
+  cor       String?  @default("#22c55e")     // cor HEX para exibir no mapa
+  geojson   String?                          // polígono GeoJSON do talhão
+  status    String   @default("vazio")       // plantado | colhido | em_preparo | vazio
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
+}
+
+// Maquinário com rastreamento GPS em tempo real
+model Maquinario {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  nome             String                       // "Trator JD 5075E"
+  tipo             String                       // trator | colheitadeira | pulverizador | caminhao | outro
+  placa            String?
+  modelo           String?
+  ano              Int?
+  token            String   @unique             // token para dispositivo GPS embarcado
+  ativo            Boolean  @default(true)
+  ultimaLatitude   Float?                       // cache da última posição
+  ultimaLongitude  Float?
+  ultimaVez        DateTime?                    // timestamp da última atualização GPS
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id])
+  posicoes         PosicaoMaquinario[]
+}
+
+// Histórico de posições GPS (trilha de rastreamento)
+model PosicaoMaquinario {
+  id           Int      @id @default(autoincrement())
+  maquinarioId Int
+  latitude     Float
+  longitude    Float
+  velocidade   Float?   // km/h
+  direcao      Float?   // graus (0-360)
+  timestamp    DateTime @default(now())
+
+  maquinario   Maquinario @relation(fields: [maquinarioId], references: [id])
+
+  @@index([maquinarioId, timestamp]) // índice para consultas de histórico
+}
