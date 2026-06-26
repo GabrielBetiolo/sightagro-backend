@@ -23,7 +23,8 @@ import { estoqueRoutes }       from './routes/estoque'
 import { pecuariaRoutes }      from './routes/pecuaria'
 import { aquiculturaRoutes }   from './routes/aquicultura'
 import { pragasRoutes }        from './routes/pragas'
-import { mapaRoutes }          from './routes/mapa'   // ← NOVO
+import { mapaRoutes }          from './routes/mapa'
+import { relatoriosRoutes }    from './routes/relatorios'   // ← NOVO
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -66,5 +67,11 @@ app.register(estoqueRoutes)
 app.register(pecuariaRoutes)
 app.register(aquiculturaRoutes)
 app.register(pragasRoutes)
-app.register(mapaRoutes)   // ← NOVO
+app.register(mapaRoutes)
+app.register(relatoriosRoutes)   // ← NOVO
 
+const PORT = parseInt(process.env.PORT || '3333')
+app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+  if (err) { app.log.error(err); process.exit(1) }
+  console.log(`🚀 Servidor rodando na porta ${PORT}`)
+})

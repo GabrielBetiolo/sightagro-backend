@@ -1,5 +1,5 @@
 // schema.prisma — SightAgro (versão completa acumulada)
-// Migration: npx prisma migrate dev --name add_mapa_talhoes_maquinarios
+// Migration: npx prisma migrate dev --name add_relatorio
 
 generator client {
   provider      = "prisma-client-js"
@@ -29,10 +29,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  fazendas      Fazenda[]
-  colaboradores Colaborador[]
+  fazendas       Fazenda[]
+  colaboradores  Colaborador[]
   insumosEstoque InsumoEstoque[]
-  maquinarios   Maquinario[]    // ← NOVO
+  maquinarios    Maquinario[]
+  relatorios     Relatorio[]    // ← NOVO
 }
 
 // ─── Fazenda ──────────────────────────────────────────────────────────────────
@@ -44,21 +45,22 @@ model Fazenda {
   latitude     Float?
   longitude    Float?
   areaHa       Float?
-  mapaPoligono String?  // GeoJSON da área total ← NOVO
+  mapaPoligono String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user         User       @relation(fields: [userId], references: [id])
-  sensores     Sensor[]
-  alertas      Alerta[]
-  irrigacoes   Irrigacao[]
-  documentos   Documento[]
-  transacoes   TransacaoFinanceira[]
+  user          User       @relation(fields: [userId], references: [id])
+  sensores      Sensor[]
+  alertas       Alerta[]
+  irrigacoes    Irrigacao[]
+  documentos    Documento[]
+  transacoes    TransacaoFinanceira[]
   movimentacoes MovimentacaoEstoque[]
-  lotes        Lote[]
-  tanques      Tanque[]
-  pragas       Praga[]
-  talhoes      Talhao[]   // ← NOVO
+  lotes         Lote[]
+  tanques       Tanque[]
+  pragas        Praga[]
+  talhoes       Talhao[]
+  relatorios    Relatorio[]  // ← NOVO
 }
 
 // ─── Sensor ───────────────────────────────────────────────────────────────────
@@ -72,8 +74,8 @@ model Sensor {
   token     String   @unique @default(cuid())
   createdAt DateTime @default(now())
 
-  fazenda   Fazenda   @relation(fields: [fazendaId], references: [id])
-  leituras  Leitura[]
+  fazenda  Fazenda   @relation(fields: [fazendaId], references: [id])
+  leituras Leitura[]
 }
 
 model Leitura {
@@ -170,8 +172,8 @@ model Colaborador {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
-  tarefas   Tarefa[]
+  user           User            @relation(fields: [userId], references: [id])
+  tarefas        Tarefa[]
   registrosPonto RegistroPonto[]
 }
 
@@ -214,7 +216,7 @@ model InsumoEstoque {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user          User   @relation(fields: [userId], references: [id])
+  user          User                  @relation(fields: [userId], references: [id])
   movimentacoes MovimentacaoEstoque[]
 }
 
@@ -258,8 +260,8 @@ model Animal {
   raca         String?
   createdAt    DateTime  @default(now())
 
-  lote         Lote      @relation(fields: [loteId], references: [id])
-  pesagens     Pesagem[]
+  lote     Lote      @relation(fields: [loteId], references: [id])
+  pesagens Pesagem[]
 }
 
 model Pesagem {
@@ -310,10 +312,10 @@ model Tanque {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  fazenda          Fazenda  @relation(fields: [fazendaId], references: [id])
-  medicoes         MedicaoAgua[]
-  alimentacoes     Alimentacao[]
-  colheitas        ColheitaAquicultura[]
+  fazenda      Fazenda             @relation(fields: [fazendaId], references: [id])
+  medicoes     MedicaoAgua[]
+  alimentacoes Alimentacao[]
+  colheitas    ColheitaAquicultura[]
 }
 
 model MedicaoAgua {
@@ -375,56 +377,69 @@ model Praga {
   fazenda           Fazenda  @relation(fields: [fazendaId], references: [id])
 }
 
-// ─── Mapa da Propriedade ─────────────────────────────────────────────────────  ← NOVOS
-
-// Talhão: subdivisão de uma fazenda com cultura plantada
+// ─── Mapa da Propriedade ──────────────────────────────────────────────────────
 model Talhao {
   id        Int      @id @default(autoincrement())
   fazendaId Int
-  nome      String                           // "Talhão Norte", "Área 2 - Soja"
-  cultura   String?                          // Soja, Milho, Pastagem, etc.
+  nome      String
+  cultura   String?
   areaHa    Float?
-  cor       String?  @default("#22c55e")     // cor HEX para exibir no mapa
-  geojson   String?                          // polígono GeoJSON do talhão
-  status    String   @default("vazio")       // plantado | colhido | em_preparo | vazio
+  cor       String?  @default("#22c55e")
+  geojson   String?
+  status    String   @default("vazio")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
 }
 
-// Maquinário com rastreamento GPS em tempo real
 model Maquinario {
-  id               Int      @id @default(autoincrement())
-  userId           Int
-  nome             String                       // "Trator JD 5075E"
-  tipo             String                       // trator | colheitadeira | pulverizador | caminhao | outro
-  placa            String?
-  modelo           String?
-  ano              Int?
-  token            String   @unique             // token para dispositivo GPS embarcado
-  ativo            Boolean  @default(true)
-  ultimaLatitude   Float?                       // cache da última posição
-  ultimaLongitude  Float?
-  ultimaVez        DateTime?                    // timestamp da última atualização GPS
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  nome            String
+  tipo            String
+  placa           String?
+  modelo          String?
+  ano             Int?
+  token           String    @unique
+  ativo           Boolean   @default(true)
+  ultimaLatitude  Float?
+  ultimaLongitude Float?
+  ultimaVez       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  user             User     @relation(fields: [userId], references: [id])
-  posicoes         PosicaoMaquinario[]
+  user     User                @relation(fields: [userId], references: [id])
+  posicoes PosicaoMaquinario[]
 }
 
-// Histórico de posições GPS (trilha de rastreamento)
 model PosicaoMaquinario {
   id           Int      @id @default(autoincrement())
   maquinarioId Int
   latitude     Float
   longitude    Float
-  velocidade   Float?   // km/h
-  direcao      Float?   // graus (0-360)
+  velocidade   Float?
+  direcao      Float?
   timestamp    DateTime @default(now())
 
   maquinario   Maquinario @relation(fields: [maquinarioId], references: [id])
 
-  @@index([maquinarioId, timestamp]) // índice para consultas de histórico
+  @@index([maquinarioId, timestamp])
+}
+
+// ─── Relatórios ───────────────────────────────────────────────────────────── ← NOVO
+model Relatorio {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  fazendaId  Int
+  tipo       String   // consolidado | financeiro | alertas | sensores | pragas | estoque
+  titulo     String
+  dataInicio DateTime
+  dataFim    DateTime
+  dadosJson  String   // snapshot completo para re-exportar (JSON)
+  resumoJson String   // resumo numérico para listagem rápida (JSON)
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  fazenda Fazenda @relation(fields: [fazendaId], references: [id])
 }
